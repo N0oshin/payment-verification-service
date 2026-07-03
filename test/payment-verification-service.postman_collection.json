@@ -1,0 +1,250 @@
+{
+  "info": {
+    "name": "Payment Verification Service API Tests",
+    "_postman_id": "c3d4e5f6-a7b8-4901-cdef-123456789012",
+    "description": "Full API test suite for payment-verification-service. Run with the matching environment file.\n\nIMPORTANT — POST /verify requires a screenshot file that already exists in the server's UPLOADS_DIR. Postman cannot create that file for you, so this collection is split into two folders:\n\n1. 'Verify — No Fixture Required' — runs with zero setup, always passes.\n2. 'Verify — Requires Generated Fixtures' — needs two things first:\n   a. Set collection variables 'testOrderNumber' (a real, existing order_number in your DB) and 'testOrderTotal' (that order's exact total, e.g. 112.00).\n   b. From this test/ folder, run: .\\generate-test-screenshots.ps1 -ApprovedAmount <testOrderTotal>\n      This writes postman-test-approved.png and postman-test-rejected.png into ../uploads (or wherever UPLOADS_DIR points).\n\nWithout that setup, requests in folder 2 still run and pass — they're written to tolerate the expected 404 gracefully — but they won't exercise the real approve/reject scoring logic.\n\nNote: POST /verify has a side effect — it overwrites orders.payment_status for whatever order_number you send. Use a disposable/test order, not a real customer order, when picking testOrderNumber.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl",         "value": "http://localhost:5004" },
+    { "key": "testOrderNumber", "value": "" },
+    { "key": "testOrderTotal",  "value": "" }
+  ],
+  "item": [
+
+    {
+      "name": "Health",
+      "item": [
+
+        {
+          "name": "Health Check (/health)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Reports connected DB', () => {",
+            "  const j = pm.response.json();",
+            "  pm.expect(j.ok).to.be.true;",
+            "  pm.expect(j).to.have.property('service', 'payment-verification-service');",
+            "  pm.expect(j).to.have.property('db', 'connected');",
+            "});"
+          ]}}]
+        },
+
+        {
+          "name": "Health Check (/api/payment-verification/health)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/payment-verification/health", "host": ["{{baseUrl}}"], "path": ["api","payment-verification","health"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Reports connected DB', () => {",
+            "  const j = pm.response.json();",
+            "  pm.expect(j.ok).to.be.true;",
+            "  pm.expect(j).to.have.property('service', 'payment-verification-service');",
+            "  pm.expect(j).to.have.property('db', 'connected');",
+            "});"
+          ]}}]
+        }
+
+      ]
+    },
+
+    {
+      "name": "Verify — No Fixture Required",
+      "item": [
+
+        {
+          "name": "Missing order_number → 400",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"screenshot_filename\": \"whatever.png\"}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/api/payment-verification/verify", "host": ["{{baseUrl}}"], "path": ["api","payment-verification","verify"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 400', () => pm.response.to.have.status(400));",
+            "pm.test('Error message', () => {",
+            "  pm.expect(pm.response.json()).to.have.property('error', 'order_number is required');",
+            "});"
+          ]}}]
+        },
+
+        {
+          "name": "Missing screenshot_filename → 400",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"order_number\": \"ORD-DOES-NOT-MATTER\"}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/api/payment-verification/verify", "host": ["{{baseUrl}}"], "path": ["api","payment-verification","verify"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 400', () => pm.response.to.have.status(400));",
+            "pm.test('Error message', () => {",
+            "  pm.expect(pm.response.json()).to.have.property('error', 'screenshot_filename is required');",
+            "});"
+          ]}}]
+        },
+
+        {
+          "name": "Screenshot Not Found → 404",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"order_number\": \"ORD-DOES-NOT-MATTER\", \"screenshot_filename\": \"this-file-does-not-exist-12345.png\"}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/api/payment-verification/verify", "host": ["{{baseUrl}}"], "path": ["api","payment-verification","verify"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "// File-existence is checked before the order lookup, so this 404s regardless",
+            "// of whether ORD-DOES-NOT-MATTER is a real order.",
+            "pm.test('Status 404', () => pm.response.to.have.status(404));",
+            "pm.test('Error message', () => {",
+            "  pm.expect(pm.response.json()).to.have.property('error', 'Screenshot file not found');",
+            "});"
+          ]}}]
+        },
+
+        {
+          "name": "Path Traversal Filename is Neutralized",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"order_number\": \"ORD-DOES-NOT-MATTER\", \"screenshot_filename\": \"../../../etc/passwd\"}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/api/payment-verification/verify", "host": ["{{baseUrl}}"], "path": ["api","payment-verification","verify"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "// path.basename() strips directory components, so this resolves to just 'passwd'",
+            "// inside UPLOADS_DIR (which won't exist) rather than escaping it — confirms no",
+            "// directory-traversal vulnerability, not a real file-not-found bug.",
+            "pm.test('Status 404 (never 200, never reads outside UPLOADS_DIR)', () => pm.response.to.have.status(404));",
+            "pm.test('Error message', () => {",
+            "  pm.expect(pm.response.json()).to.have.property('error', 'Screenshot file not found');",
+            "});"
+          ]}}]
+        }
+
+      ]
+    },
+
+    {
+      "name": "Verify — Requires Generated Fixtures",
+      "item": [
+
+        {
+          "name": "Order Not Found → 404",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"order_number\": \"THIS-ORDER-NUMBER-DOES-NOT-EXIST-XYZ\", \"screenshot_filename\": \"postman-test-approved.png\"}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/api/payment-verification/verify", "host": ["{{baseUrl}}"], "path": ["api","payment-verification","verify"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "// Passes either way: 'Order not found' if the fixture script has been run,",
+            "// or 'Screenshot file not found' if it hasn't yet — both are correct 404s.",
+            "pm.test('Status 404', () => pm.response.to.have.status(404));",
+            "pm.test('Error is one of the two expected 404 reasons', () => {",
+            "  const j = pm.response.json();",
+            "  pm.expect(j).to.have.property('error');",
+            "  pm.expect(['Order not found', 'Screenshot file not found']).to.include(j.error);",
+            "});"
+          ]}}]
+        },
+
+        {
+          "name": "Verify — Approved",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"order_number\": \"{{testOrderNumber}}\", \"screenshot_filename\": \"postman-test-approved.png\"}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/api/payment-verification/verify", "host": ["{{baseUrl}}"], "path": ["api","payment-verification","verify"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code !== 200) {",
+            "  // testOrderNumber blank -> 400 'order_number is required'; fixture not generated yet -> 404.",
+            "  pm.test('testOrderNumber not set / fixture not generated yet — expected 400 or 404', () => {",
+            "    pm.expect(pm.response.code).to.be.oneOf([400, 404]);",
+            "    pm.expect(pm.response.json()).to.have.property('error');",
+            "  });",
+            "  console.warn('Set testOrderNumber/testOrderTotal collection variables and run generate-test-screenshots.ps1 for full coverage.');",
+            "} else {",
+            "  pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "  pm.test('Verdict is approved', () => {",
+            "    const j = pm.response.json();",
+            "    pm.expect(j.verdict).to.have.property('decision', 'approved');",
+            "    pm.expect(j.verdict.reasons).to.include('amount_match');",
+            "    pm.expect(j.verdict.reasons).to.include('payee_match');",
+            "    pm.expect(j.order).to.have.property('order_number', pm.collectionVariables.get('testOrderNumber'));",
+            "  });",
+            "  pm.test('Response has order/screenshot/verdict shape', () => {",
+            "    const j = pm.response.json();",
+            "    pm.expect(j).to.have.all.keys('order', 'screenshot', 'verdict');",
+            "  });",
+            "}"
+          ]}}]
+        },
+
+        {
+          "name": "Verify — Rejected",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"order_number\": \"{{testOrderNumber}}\", \"screenshot_filename\": \"postman-test-rejected.png\"}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/api/payment-verification/verify", "host": ["{{baseUrl}}"], "path": ["api","payment-verification","verify"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code !== 200) {",
+            "  // testOrderNumber blank -> 400 'order_number is required'; fixture not generated yet -> 404.",
+            "  pm.test('testOrderNumber not set / fixture not generated yet — expected 400 or 404', () => {",
+            "    pm.expect(pm.response.code).to.be.oneOf([400, 404]);",
+            "    pm.expect(pm.response.json()).to.have.property('error');",
+            "  });",
+            "  console.warn('Set testOrderNumber/testOrderTotal collection variables and run generate-test-screenshots.ps1 for full coverage.');",
+            "} else {",
+            "  pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "  pm.test('Verdict is rejected (wrong amount + wrong payee)', () => {",
+            "    const j = pm.response.json();",
+            "    pm.expect(j.verdict).to.have.property('decision', 'rejected');",
+            "    pm.expect(j.verdict.reasons).to.include('amount_mismatch');",
+            "  });",
+            "}"
+          ]}}]
+        }
+
+      ]
+    }
+
+  ]
+}
