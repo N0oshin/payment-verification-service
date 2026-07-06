@@ -23,6 +23,7 @@ const dotenvCandidates = [
   path.resolve(__dirname, '..', '..', '..', '.env'),
 ].filter(Boolean)
 
+
 let loadedEnvPath = null
 for (const p of dotenvCandidates) {
   try {
@@ -37,6 +38,10 @@ for (const p of dotenvCandidates) {
 }
 if (loadedEnvPath) {
   console.log(`Loaded environment from: ${loadedEnvPath}`)
+}
+
+if (!DATABASE_URL) {
+  console.warn('DATABASE_URL not set')
 }
 
 function env(name, fallback = '') {
